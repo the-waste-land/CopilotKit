@@ -118,6 +118,7 @@ interface UseCoagentOptionsBase {
    */
   config?: {
     configurable?: Record<string, any>;
+    streamSubgraphs?: boolean;
     [key: string]: any;
   };
 }
