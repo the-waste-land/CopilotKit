@@ -156,13 +156,19 @@ export interface CopilotChatProps {
   labels?: CopilotChatLabels;
 
   /**
+   * Enable file upload button (supports images, xlsx, and PDF files)
+   */
+  fileUploadsEnabled?: boolean;
+
+  /**
+   * @deprecated Use fileUploadsEnabled instead
    * Enable image upload button (image inputs only supported on some models)
    */
   imageUploadsEnabled?: boolean;
 
   /**
-   * The 'accept' attribute for the file input used for image uploads.
-   * Defaults to "image/*".
+   * The 'accept' attribute for the file input.
+   * Defaults to "image/*,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/pdf".
    */
   inputFileAccept?: string;
 
@@ -290,10 +296,14 @@ export type OnStopGeneration = (args: OnStopGenerationArguments) => void;
 
 export type OnReloadMessages = (args: OnReloadMessagesArguments) => void;
 
-export type ImageUpload = {
+export type FileUpload = {
   contentType: string;
   bytes: string;
+  fileName?: string;
 };
+
+/** @deprecated Use FileUpload instead */
+export type ImageUpload = FileUpload;
 
 export function CopilotChat({
   instructions,
@@ -320,34 +330,46 @@ export function CopilotChat({
   labels,
   AssistantMessage = DefaultAssistantMessage,
   UserMessage = DefaultUserMessage,
+  fileUploadsEnabled,
   imageUploadsEnabled,
-  inputFileAccept = "image/*",
+  inputFileAccept = "image/*,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/pdf",
   hideStopButton,
 }: CopilotChatProps) {
+  // Support both new and deprecated prop names
+  const uploadsEnabled = fileUploadsEnabled ?? imageUploadsEnabled;
   const { additionalInstructions, setChatInstructions } = useCopilotContext();
-  const [selectedImages, setSelectedImages] = useState<Array<ImageUpload>>([]);
+  const [selectedFiles, setSelectedFiles] = useState<Array<FileUpload>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Clipboard paste handler
   useEffect(() => {
-    if (!imageUploadsEnabled) return;
+    if (!uploadsEnabled) return;
 
     const handlePaste = async (e: ClipboardEvent) => {
       const target = e.target as HTMLElement;
       if (!target.parentElement?.classList.contains("copilotKitInput")) return;
 
       const items = Array.from(e.clipboardData?.items || []);
-      const imageItems = items.filter((item) => item.type.startsWith("image/"));
+      // Support images, xlsx, and PDF files
+      const supportedTypes = [
+        "image/",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-excel",
+        "application/pdf",
+      ];
+      const fileItems = items.filter((item) =>
+        supportedTypes.some((type) => item.type.startsWith(type) || item.type === type),
+      );
 
-      if (imageItems.length === 0) return;
+      if (fileItems.length === 0) return;
 
-      e.preventDefault(); // Prevent default paste behavior for images
+      e.preventDefault(); // Prevent default paste behavior for files
 
-      const imagePromises: Promise<ImageUpload | null>[] = imageItems.map((item) => {
+      const filePromises: Promise<FileUpload | null>[] = fileItems.map((item) => {
         const file = item.getAsFile();
         if (!file) return Promise.resolve(null);
 
-        return new Promise<ImageUpload | null>((resolve, reject) => {
+        return new Promise<FileUpload | null>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = (e) => {
             const base64String = (e.target?.result as string)?.split(",")[1];
@@ -355,6 +377,7 @@ export function CopilotChat({
               resolve({
                 contentType: file.type,
                 bytes: base64String,
+                fileName: file.name,
               });
             } else {
               resolve(null);
@@ -366,17 +389,17 @@ export function CopilotChat({
       });
 
       try {
-        const loadedImages = (await Promise.all(imagePromises)).filter((img) => img !== null);
-        setSelectedImages((prev) => [...prev, ...loadedImages]);
+        const loadedFiles = (await Promise.all(filePromises)).filter((f) => f !== null);
+        setSelectedFiles((prev) => [...prev, ...loadedFiles]);
       } catch (error) {
         // TODO: Show an error message to the user
-        console.error("Error processing pasted images:", error);
+        console.error("Error processing pasted files:", error);
       }
     };
 
     document.addEventListener("paste", handlePaste);
     return () => document.removeEventListener("paste", handlePaste);
-  }, [imageUploadsEnabled]);
+  }, [uploadsEnabled]);
 
   useEffect(() => {
     if (!additionalInstructions?.length) {
@@ -418,15 +441,15 @@ export function CopilotChat({
     onReloadMessages,
   );
 
-  // Wrapper for sendMessage to clear selected images
+  // Wrapper for sendMessage to clear selected files
   const handleSendMessage = (text: string) => {
-    const images = selectedImages;
-    setSelectedImages([]);
+    const files = selectedFiles;
+    setSelectedFiles([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
 
-    return sendMessage(text, images);
+    return sendMessage(text, files);
   };
 
   const chatContext = React.useContext(ChatContext);
@@ -446,42 +469,64 @@ export function CopilotChat({
     }
   };
 
-  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    console.log("[handleFileUpload] 触发文件上传");
+
     if (!event.target.files || event.target.files.length === 0) {
+      console.log("[handleFileUpload] 没有选择文件");
       return;
     }
 
-    const files = Array.from(event.target.files).filter((file) => file.type.startsWith("image/"));
+    // Accept all files (filtering is done by the accept attribute on the input)
+    const files = Array.from(event.target.files);
+    console.log("[handleFileUpload] 选择的文件数量:", files.length);
+    files.forEach((file, index) => {
+      console.log(`[handleFileUpload] 文件 ${index}:`, {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+      });
+    });
+
     if (files.length === 0) return;
 
     const fileReadPromises = files.map((file) => {
-      return new Promise<{ contentType: string; bytes: string }>((resolve, reject) => {
+      return new Promise<FileUpload>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
           const base64String = (e.target?.result as string)?.split(",")[1] || "";
+          console.log(`[handleFileUpload] 文件 ${file.name} 读取完成, base64长度:`, base64String.length);
           if (base64String) {
             resolve({
               contentType: file.type,
               bytes: base64String,
+              fileName: file.name,
             });
           }
         };
-        reader.onerror = reject;
+        reader.onerror = (error) => {
+          console.error(`[handleFileUpload] 文件 ${file.name} 读取失败:`, error);
+          reject(error);
+        };
         reader.readAsDataURL(file);
       });
     });
 
     try {
-      const loadedImages = await Promise.all(fileReadPromises);
-      setSelectedImages((prev) => [...prev, ...loadedImages]);
+      const loadedFiles = await Promise.all(fileReadPromises);
+      console.log("[handleFileUpload] 所有文件读取完成:", loadedFiles.length);
+      setSelectedFiles((prev) => {
+        const newFiles = [...prev, ...loadedFiles];
+        console.log("[handleFileUpload] 更新后的文件队列:", newFiles.length);
+        return newFiles;
+      });
     } catch (error) {
-      // TODO: Show an error message to the user
-      console.error("Error reading files:", error);
+      console.error("[handleFileUpload] 读取文件出错:", error);
     }
   };
 
-  const removeSelectedImage = (index: number) => {
-    setSelectedImages((prev) => prev.filter((_, i) => i !== index));
+  const removeSelectedFile = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   return (
@@ -510,14 +555,14 @@ export function CopilotChat({
         )}
       </Messages>
 
-      {imageUploadsEnabled && (
+      {uploadsEnabled && (
         <>
-          <ImageUploadQueue images={selectedImages} onRemoveImage={removeSelectedImage} />
+          <ImageUploadQueue images={selectedFiles} onRemoveImage={removeSelectedFile} />
           <input
             type="file"
             multiple
             ref={fileInputRef}
-            onChange={handleImageUpload}
+            onChange={handleFileUpload}
             accept={inputFileAccept}
             style={{ display: "none" }}
           />
@@ -529,7 +574,7 @@ export function CopilotChat({
         onSend={handleSendMessage}
         isVisible={isVisible}
         onStop={stopGeneration}
-        onUpload={imageUploadsEnabled ? () => fileInputRef.current?.click() : undefined}
+        onUpload={uploadsEnabled ? () => fileInputRef.current?.click() : undefined}
         hideStopButton={hideStopButton}
       />
     </WrappedCopilotChat>
@@ -625,10 +670,10 @@ export const useCopilotChatLogic = (
 
   const sendMessage = async (
     messageContent: string,
-    imagesToUse?: Array<{ contentType: string; bytes: string }>,
+    filesToUse?: Array<{ contentType: string; bytes: string; fileName?: string }>,
   ) => {
-    // Use images passed in the call OR the ones from the state (passed via props)
-    const images = imagesToUse || [];
+    // Use files passed in the call OR the ones from the state (passed via props)
+    const files = filesToUse || [];
 
     abortSuggestions();
     setCurrentSuggestions([]);
@@ -644,31 +689,44 @@ export const useCopilotChatLogic = (
 
       if (onSubmitMessage) {
         try {
-          // Call onSubmitMessage only with text, as image handling is internal right now
+          // Call onSubmitMessage only with text, as file handling is internal right now
           await onSubmitMessage(messageContent);
         } catch (error) {
           console.error("Error in onSubmitMessage:", error);
         }
       }
 
-      await appendMessage(textMessage, { followUp: images.length === 0 });
+      await appendMessage(textMessage, { followUp: files.length === 0 });
 
       if (!firstMessage) {
         firstMessage = textMessage;
       }
     }
 
-    // Send image messages
-    if (images.length > 0) {
-      for (let i = 0; i < images.length; i++) {
-        const imageMessage = new ImageMessage({
-          format: images[i].contentType.replace("image/", ""),
-          bytes: images[i].bytes,
+    // Send file messages (images and other files)
+    if (files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        // For images, extract format from contentType (e.g., "image/png" -> "png")
+        // For other files, encode fileName in format as "mimeType::fileName"
+        let format: string;
+        if (file.contentType.startsWith("image/")) {
+          format = file.contentType.replace("image/", "");
+        } else {
+          // Encode fileName in format for non-image files
+          format = file.fileName
+            ? `${file.contentType}::${file.fileName}`
+            : file.contentType;
+        }
+
+        const fileMessage = new ImageMessage({
+          format: format,
+          bytes: file.bytes,
           role: Role.User,
         });
-        await appendMessage(imageMessage, { followUp: i === images.length - 1 });
+        await appendMessage(fileMessage, { followUp: i === files.length - 1 });
         if (!firstMessage) {
-          firstMessage = imageMessage;
+          firstMessage = fileMessage;
         }
       }
     }
