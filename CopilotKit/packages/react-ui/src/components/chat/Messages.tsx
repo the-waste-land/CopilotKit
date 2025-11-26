@@ -3,6 +3,7 @@ import { MessagesProps } from "./props";
 import { useChatContext } from "./ChatContext";
 import { Message, ResultMessage, TextMessage, Role } from "@copilotkit/runtime-client-gql";
 import { useLangGraphInterruptRender } from "@copilotkit/react-core";
+import { RenderFileMessage as DefaultRenderFileMessage } from "./messages/RenderFileMessage";
 
 export const Messages = ({
   messages,
@@ -13,6 +14,7 @@ export const Messages = ({
   RenderAgentStateMessage,
   RenderResultMessage,
   RenderImageMessage,
+  RenderFileMessage = DefaultRenderFileMessage,
   AssistantMessage,
   UserMessage,
   onRegenerate,
@@ -111,6 +113,22 @@ export const Messages = ({
           } else if (message.isImageMessage && message.isImageMessage()) {
             return (
               <RenderImageMessage
+                key={index}
+                message={message}
+                inProgress={inProgress}
+                index={index}
+                isCurrentMessage={isCurrentMessage}
+                AssistantMessage={AssistantMessage}
+                UserMessage={UserMessage}
+                onRegenerate={onRegenerate}
+                onCopy={onCopy}
+                onThumbsUp={onThumbsUp}
+                onThumbsDown={onThumbsDown}
+              />
+            );
+          } else if (message.isFileMessage && message.isFileMessage()) {
+            return (
+              <RenderFileMessage
                 key={index}
                 message={message}
                 inProgress={inProgress}

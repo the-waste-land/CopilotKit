@@ -4,6 +4,7 @@ import {
   TextMessageInput,
   AgentStateMessageInput,
   ImageMessageInput,
+  FileMessageInput,
 } from "../../inputs/message.input";
 import { BaseMessageInput } from "../base";
 import { MessageRole } from "../enums";
@@ -13,7 +14,8 @@ export type MessageType =
   | "ActionExecutionMessage"
   | "ResultMessage"
   | "AgentStateMessage"
-  | "ImageMessage";
+  | "ImageMessage"
+  | "FileMessage";
 
 export class Message extends BaseMessageInput {
   type: MessageType;
@@ -36,6 +38,10 @@ export class Message extends BaseMessageInput {
 
   isImageMessage(): this is ImageMessage {
     return this.type === "ImageMessage";
+  }
+
+  isFileMessage(): this is FileMessage {
+    return this.type === "FileMessage";
   }
 }
 
@@ -145,6 +151,15 @@ export class ImageMessage extends Message implements ImageMessageInput {
   type: MessageType = "ImageMessage";
   format: string;
   bytes: string;
+  role: MessageRole;
+  parentMessageId?: string;
+}
+
+export class FileMessage extends Message implements FileMessageInput {
+  type: MessageType = "FileMessage";
+  mimeType: string;
+  bytes: string;
+  fileName: string;
   role: MessageRole;
   parentMessageId?: string;
 }

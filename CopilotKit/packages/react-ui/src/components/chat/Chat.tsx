@@ -58,6 +58,7 @@ import { RenderActionExecutionMessage as DefaultRenderActionExecutionMessage } f
 import { RenderResultMessage as DefaultRenderResultMessage } from "./messages/RenderResultMessage";
 import { RenderAgentStateMessage as DefaultRenderAgentStateMessage } from "./messages/RenderAgentStateMessage";
 import { RenderImageMessage as DefaultRenderImageMessage } from "./messages/RenderImageMessage";
+import { RenderFileMessage as DefaultRenderFileMessage } from "./messages/RenderFileMessage";
 import { AssistantMessage as DefaultAssistantMessage } from "./messages/AssistantMessage";
 import { UserMessage as DefaultUserMessage } from "./messages/UserMessage";
 import React, { useEffect, useRef, useState } from "react";
@@ -69,7 +70,8 @@ import {
 } from "@copilotkit/react-core";
 import { reloadSuggestions } from "./Suggestion";
 import { CopilotChatSuggestion } from "../../types/suggestions";
-import { Message, Role, TextMessage, ImageMessage } from "@copilotkit/runtime-client-gql";
+import { Message, Role, TextMessage, ImageMessage, FileMessage } from "@copilotkit/runtime-client-gql";
+import { isImageMimeType } from "../../lib/file-utils";
 import { randomId } from "@copilotkit/shared";
 import {
   AssistantMessageProps,
@@ -221,6 +223,11 @@ export interface CopilotChatProps {
   RenderImageMessage?: React.ComponentType<RenderMessageProps>;
 
   /**
+   * A custom RenderFileMessage component to use instead of the default.
+   */
+  RenderFileMessage?: React.ComponentType<RenderMessageProps>;
+
+  /**
    * A custom suggestions list component to use instead of the default.
    */
   RenderSuggestionsList?: React.ComponentType<RenderSuggestionsListProps>;
@@ -323,6 +330,7 @@ export function CopilotChat({
   RenderAgentStateMessage = DefaultRenderAgentStateMessage,
   RenderResultMessage = DefaultRenderResultMessage,
   RenderImageMessage = DefaultRenderImageMessage,
+  RenderFileMessage = DefaultRenderFileMessage,
   RenderSuggestionsList = DefaultRenderSuggestionsList,
   Input = DefaultInput,
   className,
@@ -539,6 +547,7 @@ export function CopilotChat({
         RenderAgentStateMessage={RenderAgentStateMessage}
         RenderResultMessage={RenderResultMessage}
         RenderImageMessage={RenderImageMessage}
+        RenderFileMessage={RenderFileMessage}
         messages={visibleMessages}
         inProgress={isLoading}
         onRegenerate={handleRegenerate}
@@ -707,23 +716,26 @@ export const useCopilotChatLogic = (
     if (files.length > 0) {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        // For images, extract format from contentType (e.g., "image/png" -> "png")
-        // For other files, encode fileName in format as "mimeType::fileName"
-        let format: string;
-        if (file.contentType.startsWith("image/")) {
-          format = file.contentType.replace("image/", "");
+        let fileMessage: Message;
+
+        if (isImageMimeType(file.contentType)) {
+          // For images, use ImageMessage with format extracted from contentType
+          const format = file.contentType.replace("image/", "");
+          fileMessage = new ImageMessage({
+            format: format,
+            bytes: file.bytes,
+            role: Role.User,
+          });
         } else {
-          // Encode fileName in format for non-image files
-          format = file.fileName
-            ? `${file.contentType}::${file.fileName}`
-            : file.contentType;
+          // For non-image files (xlsx, PDF, etc.), use FileMessage
+          fileMessage = new FileMessage({
+            mimeType: file.contentType,
+            bytes: file.bytes,
+            fileName: file.fileName || "document",
+            role: Role.User,
+          });
         }
 
-        const fileMessage = new ImageMessage({
-          format: format,
-          bytes: file.bytes,
-          role: Role.User,
-        });
         await appendMessage(fileMessage, { followUp: i === files.length - 1 });
         if (!firstMessage) {
           firstMessage = fileMessage;

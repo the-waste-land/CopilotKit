@@ -75,6 +75,7 @@ type BaseLangGraphPlatformMessage = Omit<
   | "isResultMessage"
   | "isTextMessage"
   | "isImageMessage"
+  | "isFileMessage"
   | "isActionExecutionMessage"
   | "isAgentStateMessage"
   | "type"
@@ -876,6 +877,9 @@ function copilotkitMessagesToLangChain(messages: Message[]): LangGraphPlatformMe
   const processedActionExecutions = new Set<string>();
 
   for (const message of messages) {
+    
+    console.error("+++++++++++liweixin+++++++++++, message: ")
+    console.error(message)
     // Handle TextMessage
     if (message.isTextMessage()) {
       if (message.role === "user") {
@@ -902,6 +906,26 @@ function copilotkitMessagesToLangChain(messages: Message[]): LangGraphPlatformMe
 
     // Handle ImageMessage
     if (message.isImageMessage()) {
+      if (message.role === "user") {
+        result.push({
+          ...message,
+          role: MessageRole.user,
+          content: "",
+        });
+      } else if (message.role === "assistant") {
+        result.push({
+          ...message,
+          role: MessageRole.assistant,
+          content: "",
+        });
+      }
+      continue;
+    }
+
+    // Handle FileMessage
+    if (message.isFileMessage()) {
+      console.log("!!!liweixin!!!, push file")
+      console.log(message)
       if (message.role === "user") {
         result.push({
           ...message,

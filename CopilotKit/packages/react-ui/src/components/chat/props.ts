@@ -36,6 +36,7 @@ export interface MessagesProps {
   RenderAgentStateMessage: React.ComponentType<RenderMessageProps>;
   RenderResultMessage: React.ComponentType<RenderMessageProps>;
   RenderImageMessage: React.ComponentType<RenderMessageProps>;
+  RenderFileMessage?: React.ComponentType<RenderMessageProps>;
 
   /**
    * Callback function to regenerate the assistant's response

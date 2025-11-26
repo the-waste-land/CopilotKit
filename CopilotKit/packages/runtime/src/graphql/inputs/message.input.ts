@@ -20,6 +20,9 @@ export class MessageInput extends BaseMessageInput {
 
   @Field(() => ImageMessageInput, { nullable: true })
   imageMessage?: ImageMessageInput;
+
+  @Field(() => FileMessageInput, { nullable: true })
+  fileMessage?: FileMessageInput;
 }
 
 @InputType()
@@ -101,6 +104,24 @@ export class ImageMessageInput {
 
   @Field(() => String)
   bytes: string;
+
+  @Field(() => String, { nullable: true })
+  parentMessageId?: string;
+
+  @Field(() => MessageRole)
+  role: MessageRole;
+}
+
+@InputType()
+export class FileMessageInput {
+  @Field(() => String)
+  mimeType: string;
+
+  @Field(() => String)
+  bytes: string;
+
+  @Field(() => String)
+  fileName: string;
 
   @Field(() => String, { nullable: true })
   parentMessageId?: string;

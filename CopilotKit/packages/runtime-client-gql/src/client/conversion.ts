@@ -10,6 +10,7 @@ import {
   ResultMessage,
   TextMessage,
   ImageMessage,
+  FileMessage,
 } from "./types";
 
 import untruncateJson from "untruncate-json";
@@ -73,6 +74,18 @@ export function convertMessagesToGqlInput(messages: Message[]): MessageInput[] {
         imageMessage: {
           format: message.format,
           bytes: message.bytes,
+          role: message.role as any,
+          parentMessageId: message.parentMessageId,
+        },
+      };
+    } else if (message.isFileMessage()) {
+      return {
+        id: message.id,
+        createdAt: message.createdAt,
+        fileMessage: {
+          mimeType: message.mimeType,
+          bytes: message.bytes,
+          fileName: message.fileName,
           role: message.role as any,
           parentMessageId: message.parentMessageId,
         },
@@ -163,6 +176,17 @@ export function convertGqlOutputToMessages(
         createdAt: new Date(),
         status: message.status || { code: MessageStatusCode.Pending },
       });
+    } else if (message.__typename === "FileMessageOutput") {
+      return new FileMessage({
+        id: message.id,
+        mimeType: (message as any).mimeType,
+        bytes: (message as any).bytes,
+        fileName: (message as any).fileName,
+        role: (message as any).role,
+        parentMessageId: (message as any).parentMessageId,
+        createdAt: new Date(),
+        status: message.status || { code: MessageStatusCode.Pending },
+      });
     }
 
     throw new Error("Unknown message type");
@@ -226,6 +250,19 @@ export function loadMessagesFromJsonRepresentation(json: any[]): Message[] {
           id: item.id,
           format: item.format,
           bytes: item.bytes,
+          role: item.role,
+          parentMessageId: item.parentMessageId,
+          createdAt: item.createdAt || new Date(),
+          status: item.status || { code: MessageStatusCode.Success },
+        }),
+      );
+    } else if ("mimeType" in item && "fileName" in item) {
+      result.push(
+        new FileMessage({
+          id: item.id,
+          mimeType: item.mimeType,
+          bytes: item.bytes,
+          fileName: item.fileName,
           role: item.role,
           parentMessageId: item.parentMessageId,
           createdAt: item.createdAt || new Date(),

@@ -5,6 +5,7 @@ import {
   TextMessage,
   AgentStateMessage,
   ImageMessage,
+  FileMessage,
 } from "../graphql/types/converted";
 import { MessageInput } from "../graphql/inputs/message.input";
 import { plainToInstance } from "class-transformer";
@@ -57,6 +58,16 @@ export function convertGqlInputToMessages(inputMessages: MessageInput[]): Messag
         role: message.agentStateMessage.role,
         state: JSON.parse(message.agentStateMessage.state),
         running: message.agentStateMessage.running,
+      });
+    } else if (message.fileMessage) {
+      return plainToInstance(FileMessage, {
+        id: message.id,
+        createdAt: message.createdAt,
+        role: message.fileMessage.role,
+        bytes: message.fileMessage.bytes,
+        mimeType: message.fileMessage.mimeType,
+        fileName: message.fileMessage.fileName,
+        parentMessageId: message.fileMessage.parentMessageId,
       });
     } else {
       return null;

@@ -17,6 +17,8 @@ import { BaseMetaEvent } from "./meta-events.type";
       return AgentStateMessageOutput;
     } else if (value.hasOwnProperty("format") && value.hasOwnProperty("bytes")) {
       return ImageMessageOutput;
+    } else if (value.hasOwnProperty("mimeType") && value.hasOwnProperty("fileName")) {
+      return FileMessageOutput;
     }
     return undefined;
   },
@@ -108,6 +110,24 @@ export class ImageMessageOutput {
 
   @Field(() => String)
   bytes: string;
+
+  @Field(() => MessageRole)
+  role: MessageRole;
+
+  @Field(() => String, { nullable: true })
+  parentMessageId?: string;
+}
+
+@ObjectType({ implements: BaseMessageOutput })
+export class FileMessageOutput {
+  @Field(() => String)
+  mimeType: string;
+
+  @Field(() => String)
+  bytes: string;
+
+  @Field(() => String)
+  fileName: string;
 
   @Field(() => MessageRole)
   role: MessageRole;

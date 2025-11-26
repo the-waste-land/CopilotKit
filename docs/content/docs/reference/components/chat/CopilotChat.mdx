@@ -111,13 +111,13 @@ Icons can be used to set custom icons for the chat window.
 Labels can be used to set custom labels for the chat window.
 </PropertyReference>
 
-<PropertyReference name="imageUploadsEnabled" type="boolean"  > 
-Enable image upload button (image inputs only supported on some models)
+<PropertyReference name="fileUploadsEnabled" type="boolean"  > 
+Enable file upload button (supports images, xlsx, and PDF files)
 </PropertyReference>
 
 <PropertyReference name="inputFileAccept" type="string"  > 
-The 'accept' attribute for the file input used for image uploads.
-  Defaults to "image".
+The 'accept' attribute for the file input.
+  Defaults to "image,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/pdf".
 </PropertyReference>
 
 <PropertyReference name="makeSystemMessage" type="SystemMessageFunction"  > 
@@ -157,6 +157,10 @@ A custom RenderResultMessage component to use instead of the default.
 
 <PropertyReference name="RenderImageMessage" type="React.ComponentType<RenderMessageProps>"  > 
 A custom RenderImageMessage component to use instead of the default.
+</PropertyReference>
+
+<PropertyReference name="RenderFileMessage" type="React.ComponentType<RenderMessageProps>"  > 
+A custom RenderFileMessage component to use instead of the default.
 </PropertyReference>
 
 <PropertyReference name="RenderSuggestionsList" type="React.ComponentType<RenderSuggestionsListProps>"  > 
