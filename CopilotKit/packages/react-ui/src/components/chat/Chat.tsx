@@ -86,6 +86,13 @@ import {
 import { HintFunction, runAgent, stopAgent } from "@copilotkit/react-core";
 import { ImageUploadQueue } from "./ImageUploadQueue";
 import { Suggestions as DefaultRenderSuggestionsList } from "./Suggestions";
+import { ImageCompressionDialog } from "./ImageCompressionDialog";
+import {
+  convertPngToJpg,
+  compressJpgToTarget,
+  getImageSizeInKB,
+  needsCompression,
+} from "../../lib/image-compression";
 
 /**
  * Props for CopilotChat component.
@@ -173,6 +180,26 @@ export interface CopilotChatProps {
    * Defaults to "image/*,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/pdf".
    */
   inputFileAccept?: string;
+
+  /**
+   * Image compression configuration for uploaded images.
+   * When enabled, PNG images are automatically converted to JPEG and compressed,
+   * and large JPEG images will prompt the user for compression confirmation.
+   */
+  imageCompression?: {
+    /**
+     * Enable automatic image compression. Defaults to false.
+     */
+    enabled: boolean;
+    /**
+     * Target size in KB for PNG to JPEG conversion. Defaults to 200.
+     */
+    pngTargetSizeKB?: number;
+    /**
+     * Size threshold in KB for JPEG compression prompt. Defaults to 250.
+     */
+    jpgTargetSizeKB?: number;
+  };
 
   /**
    * A function that takes in context string and instructions and returns
@@ -341,6 +368,7 @@ export function CopilotChat({
   fileUploadsEnabled,
   imageUploadsEnabled,
   inputFileAccept = "image/*,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/pdf",
+  imageCompression,
   hideStopButton,
 }: CopilotChatProps) {
   // Support both new and deprecated prop names
@@ -348,6 +376,44 @@ export function CopilotChat({
   const { additionalInstructions, setChatInstructions } = useCopilotContext();
   const [selectedFiles, setSelectedFiles] = useState<Array<FileUpload>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Compression dialog state
+  const [showCompressionDialog, setShowCompressionDialog] = useState(false);
+  const [pendingCompression, setPendingCompression] = useState<{
+    file: File;
+    base64: string;
+    resolve: (value: FileUpload | null) => void;
+  } | null>(null);
+
+  // Handle compression confirmation
+  const handleCompressionConfirm = async () => {
+    if (!pendingCompression) return;
+    
+    try {
+      const jpgTargetSize = imageCompression?.jpgTargetSizeKB ?? 250;
+      const compressedBase64 = await compressJpgToTarget(pendingCompression.base64, jpgTargetSize);
+      pendingCompression.resolve({
+        contentType: pendingCompression.file.type,
+        bytes: compressedBase64,
+        fileName: pendingCompression.file.name,
+      });
+    } catch (error) {
+      console.error("[handleCompressionConfirm] 压缩失败:", error);
+      pendingCompression.resolve(null);
+    } finally {
+      setShowCompressionDialog(false);
+      setPendingCompression(null);
+    }
+  };
+
+  // Handle compression cancellation
+  const handleCompressionCancel = () => {
+    if (pendingCompression) {
+      pendingCompression.resolve(null);
+    }
+    setShowCompressionDialog(false);
+    setPendingCompression(null);
+  };
 
   // Clipboard paste handler
   useEffect(() => {
@@ -377,18 +443,74 @@ export function CopilotChat({
         const file = item.getAsFile();
         if (!file) return Promise.resolve(null);
 
-        return new Promise<FileUpload | null>((resolve, reject) => {
+        return new Promise<FileUpload | null>(async (resolve, reject) => {
           const reader = new FileReader();
-          reader.onload = (e) => {
+          reader.onload = async (e) => {
             const base64String = (e.target?.result as string)?.split(",")[1];
-            if (base64String) {
+            if (!base64String) {
+              resolve(null);
+              return;
+            }
+
+            try {
+              let finalBase64 = base64String;
+              let finalContentType = file.type;
+
+              // Check if compression is enabled and if it's an image
+              const isImage = file.type.startsWith("image/");
+              const compressionEnabled = imageCompression?.enabled === true;
+              
+              if (isImage && compressionEnabled) {
+                const isPng = file.type === "image/png";
+                const isJpg = file.type === "image/jpeg" || file.type === "image/jpg";
+                const pngTargetSize = imageCompression?.pngTargetSizeKB ?? 200;
+                const jpgTargetSize = imageCompression?.jpgTargetSizeKB ?? 250;
+                
+                if (isPng) {
+                  // PNG: Always convert to JPG and compress to target size
+                  console.log(`[handlePaste] PNG 图片 ${file.name} 正在转换为 JPG...`);
+                  finalBase64 = await convertPngToJpg(base64String, pngTargetSize);
+                  finalContentType = "image/jpeg";
+                  const finalSizeKB = getImageSizeInKB(finalBase64);
+                  console.log(`[handlePaste] PNG 转换完成，新大小: ${finalSizeKB.toFixed(0)} KB`);
+                } else if (isJpg) {
+                  // JPG: Check size and show dialog if exceeds threshold
+                  const sizeKB = getImageSizeInKB(base64String);
+                  console.log(`[handlePaste] JPG 图片 ${file.name} 大小: ${sizeKB.toFixed(0)} KB`);
+                  
+                  if (needsCompression(base64String, jpgTargetSize)) {
+                    console.log(`[handlePaste] JPG 图片 ${file.name} 超过 ${jpgTargetSize}KB，等待用户确认...`);
+                    // Show dialog and wait for user confirmation
+                    const result = await new Promise<FileUpload | null>((dialogResolve) => {
+                      setPendingCompression({
+                        file,
+                        base64: base64String,
+                        resolve: dialogResolve,
+                      });
+                      setShowCompressionDialog(true);
+                    });
+                    
+                    if (result === null) {
+                      console.log(`[handlePaste] 用户取消压缩 ${file.name}`);
+                      resolve(null);
+                      return;
+                    }
+                    
+                    finalBase64 = result.bytes;
+                    const finalSizeKB = getImageSizeInKB(finalBase64);
+                    console.log(`[handlePaste] JPG 压缩完成，新大小: ${finalSizeKB.toFixed(0)} KB`);
+                  }
+                }
+              }
+
               resolve({
-                contentType: file.type,
-                bytes: base64String,
+                contentType: finalContentType,
+                bytes: finalBase64,
                 fileName: file.name,
               });
-            } else {
-              resolve(null);
+            } catch (error) {
+              console.error(`[handlePaste] 处理文件 ${file.name} 失败:`, error);
+              reject(error);
             }
           };
           reader.onerror = reject;
@@ -499,17 +621,76 @@ export function CopilotChat({
     if (files.length === 0) return;
 
     const fileReadPromises = files.map((file) => {
-      return new Promise<FileUpload>((resolve, reject) => {
+      return new Promise<FileUpload | null>(async (resolve, reject) => {
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
           const base64String = (e.target?.result as string)?.split(",")[1] || "";
           console.log(`[handleFileUpload] 文件 ${file.name} 读取完成, base64长度:`, base64String.length);
-          if (base64String) {
+          
+          if (!base64String) {
+            resolve(null);
+            return;
+          }
+
+          try {
+            let finalBase64 = base64String;
+            let finalContentType = file.type;
+
+            // Check if compression is enabled and if it's an image
+            const isImage = file.type.startsWith("image/");
+            const compressionEnabled = imageCompression?.enabled === true;
+            
+            if (isImage && compressionEnabled) {
+              const isPng = file.type === "image/png";
+              const isJpg = file.type === "image/jpeg" || file.type === "image/jpg";
+              const pngTargetSize = imageCompression?.pngTargetSizeKB ?? 200;
+              const jpgTargetSize = imageCompression?.jpgTargetSizeKB ?? 250;
+              
+              if (isPng) {
+                // PNG: Always convert to JPG and compress to target size
+                console.log(`[handleFileUpload] PNG 图片 ${file.name} 正在转换为 JPG...`);
+                finalBase64 = await convertPngToJpg(base64String, pngTargetSize);
+                finalContentType = "image/jpeg";
+                const finalSizeKB = getImageSizeInKB(finalBase64);
+                console.log(`[handleFileUpload] PNG 转换完成，新大小: ${finalSizeKB.toFixed(0)} KB`);
+              } else if (isJpg) {
+                // JPG: Check size and show dialog if exceeds threshold
+                const sizeKB = getImageSizeInKB(base64String);
+                console.log(`[handleFileUpload] JPG 图片 ${file.name} 大小: ${sizeKB.toFixed(0)} KB`);
+                
+                if (needsCompression(base64String, jpgTargetSize)) {
+                  console.log(`[handleFileUpload] JPG 图片 ${file.name} 超过 ${jpgTargetSize}KB，等待用户确认...`);
+                  // Show dialog and wait for user confirmation
+                  const result = await new Promise<FileUpload | null>((dialogResolve) => {
+                    setPendingCompression({
+                      file,
+                      base64: base64String,
+                      resolve: dialogResolve,
+                    });
+                    setShowCompressionDialog(true);
+                  });
+                  
+                  if (result === null) {
+                    console.log(`[handleFileUpload] 用户取消压缩 ${file.name}`);
+                    resolve(null);
+                    return;
+                  }
+                  
+                  finalBase64 = result.bytes;
+                  const finalSizeKB = getImageSizeInKB(finalBase64);
+                  console.log(`[handleFileUpload] JPG 压缩完成，新大小: ${finalSizeKB.toFixed(0)} KB`);
+                }
+              }
+            }
+
             resolve({
-              contentType: file.type,
-              bytes: base64String,
+              contentType: finalContentType,
+              bytes: finalBase64,
               fileName: file.name,
             });
+          } catch (error) {
+            console.error(`[handleFileUpload] 处理文件 ${file.name} 失败:`, error);
+            reject(error);
           }
         };
         reader.onerror = (error) => {
@@ -521,7 +702,7 @@ export function CopilotChat({
     });
 
     try {
-      const loadedFiles = await Promise.all(fileReadPromises);
+      const loadedFiles = (await Promise.all(fileReadPromises)).filter((f) => f !== null);
       console.log("[handleFileUpload] 所有文件读取完成:", loadedFiles.length);
       setSelectedFiles((prev) => {
         const newFiles = [...prev, ...loadedFiles];
@@ -586,6 +767,15 @@ export function CopilotChat({
         onUpload={uploadsEnabled ? () => fileInputRef.current?.click() : undefined}
         hideStopButton={hideStopButton}
       />
+
+      {showCompressionDialog && pendingCompression && (
+        <ImageCompressionDialog
+          fileName={pendingCompression.file.name}
+          fileSizeKB={getImageSizeInKB(pendingCompression.base64)}
+          onConfirm={handleCompressionConfirm}
+          onCancel={handleCompressionCancel}
+        />
+      )}
     </WrappedCopilotChat>
   );
 }

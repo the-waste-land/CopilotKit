@@ -121,6 +121,12 @@ The 'accept' attribute for the file input.
   Defaults to "image,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/pdf".
 </PropertyReference>
 
+<PropertyReference name="imageCompression" type="{ /** * Enable automatic image compression. Defaults to false. */ enabled: boolean; /** * Target size in KB for PNG to JPEG conversion. Defaults to 200. */ pngTargetSizeKB?: number; /** * Size threshold in KB for JPEG compression prompt. Defaults to 250. */ jpgTargetSizeKB?: number; }"  > 
+Image compression configuration for uploaded images.
+  When enabled, PNG images are automatically converted to JPEG and compressed,
+  and large JPEG images will prompt the user for compression confirmation.
+</PropertyReference>
+
 <PropertyReference name="makeSystemMessage" type="SystemMessageFunction"  > 
 A function that takes in context string and instructions and returns
   the system message to include in the chat request.
