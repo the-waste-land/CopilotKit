@@ -1,5 +1,13 @@
 # @copilotkit/sdk-js
 
+## 1.9.6
+
+### Patch Changes
+
+- Add image compress
+- Updated dependencies
+  - @copilotkit/shared@1.9.6
+
 ## 1.9.3
 
 ### Patch Changes

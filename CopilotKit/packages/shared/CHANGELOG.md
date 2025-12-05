@@ -1,5 +1,11 @@
 # @copilotkit/shared
 
+## 1.9.6
+
+### Patch Changes
+
+- Add image compress
+
 ## 1.9.3
 
 ### Patch Changes
