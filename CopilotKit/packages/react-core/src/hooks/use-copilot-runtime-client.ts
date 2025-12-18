@@ -78,12 +78,13 @@ export const useCopilotRuntimeClient = (options: CopilotRuntimeClientHookOptions
               return;
             }
 
-            if (!isDev) {
+            // DEV_ONLY errors - only show in development
+            if (visibility === ErrorVisibility.DEV_ONLY && !isDev) {
               console.error("CopilotKit Error (hidden in production):", gqlError.message);
               return;
             }
 
-            // All errors (including DEV_ONLY) show as banners for consistency
+            // All other errors (BANNER, TOAST) show regardless of environment
             // Deduplicate to prevent spam
             const now = Date.now();
             const errorMessage = gqlError.message;
@@ -132,13 +133,33 @@ export const useCopilotRuntimeClient = (options: CopilotRuntimeClientHookOptions
         }
       },
       handleGQLWarning: (message: string) => {
-        console.warn(message);
-        // Show warnings as banners too for consistency
-        const warningError = new CopilotKitError({
-          message,
-          code: CopilotKitErrorCode.UNKNOWN,
-        });
-        setBannerError(warningError);
+        const isDev = shouldShowDevConsole(showDevConsole ?? false);
+
+        // Check if this is a version mismatch warning
+        const isVersionMismatch = message.includes("Version mismatch");
+
+        if (isVersionMismatch) {
+          // Version mismatch warnings should only show in dev mode
+          if (isDev) {
+            console.warn(message);
+            const warningError = new CopilotKitError({
+              message,
+              code: CopilotKitErrorCode.VERSION_MISMATCH,
+            });
+            setBannerError(warningError);
+          } else {
+            // In production, just log to console
+            console.warn("CopilotKit Version Mismatch (hidden in production):", message);
+          }
+        } else {
+          // Other warnings show in all environments
+          console.warn(message);
+          const warningError = new CopilotKitError({
+            message,
+            code: CopilotKitErrorCode.UNKNOWN,
+          });
+          setBannerError(warningError);
+        }
       },
     });
   }, [runtimeOptions, setBannerError, showDevConsole, onError]);

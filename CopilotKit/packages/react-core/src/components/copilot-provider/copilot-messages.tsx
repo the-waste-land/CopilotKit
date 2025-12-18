@@ -154,18 +154,19 @@ export function CopilotMessages({ children }: { children: ReactNode }) {
           const visibility = extensions?.visibility as ErrorVisibility;
           const isDev = shouldShowDevConsole(showDevConsole);
 
-          if (!isDev) {
-            console.error("CopilotKit Error (hidden in production):", gqlError.message);
-            return;
-          }
-
           // Silent errors - just log
           if (visibility === ErrorVisibility.SILENT) {
             console.error("CopilotKit Silent Error:", gqlError.message);
             return;
           }
 
-          // All other errors (including DEV_ONLY) show as banners for consistency
+          // DEV_ONLY errors - only show in development
+          if (visibility === ErrorVisibility.DEV_ONLY && !isDev) {
+            console.error("CopilotKit Error (hidden in production):", gqlError.message);
+            return;
+          }
+
+          // All other errors (BANNER, TOAST) show regardless of environment
           const ckError = createStructuredError(gqlError);
           if (ckError) {
             setBannerError(ckError);
@@ -186,19 +187,14 @@ export function CopilotMessages({ children }: { children: ReactNode }) {
         // Process all errors as banners
         graphQLErrors.forEach(routeError);
       } else {
-        const isDev = shouldShowDevConsole(showDevConsole);
-        if (!isDev) {
-          console.error("CopilotKit Error (hidden in production):", error);
-        } else {
-          // Route non-GraphQL errors to banner as well
-          const fallbackError = new CopilotKitError({
-            message: error?.message || String(error),
-            code: CopilotKitErrorCode.UNKNOWN,
-          });
-          setBannerError(fallbackError);
-          // Trace the non-GraphQL error
-          traceUIError(fallbackError, error);
-        }
+        // Non-GraphQL errors - show in all environments
+        const fallbackError = new CopilotKitError({
+          message: error?.message || String(error),
+          code: CopilotKitErrorCode.UNKNOWN,
+        });
+        setBannerError(fallbackError);
+        // Trace the non-GraphQL error
+        traceUIError(fallbackError, error);
       }
     },
     [setBannerError, showDevConsole, traceUIError],

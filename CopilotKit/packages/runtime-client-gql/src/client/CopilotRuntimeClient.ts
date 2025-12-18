@@ -159,12 +159,18 @@ export class CopilotRuntimeClient {
                 ],
               };
 
+              console.error("CopilotKit structured error:", syntheticError);
               if (handleGQLErrors) {
                 handleGQLErrors(syntheticError);
+              } else {
+                console.error("handleGQLErrors is not defined, error may not be displayed!");
               }
-              return; // Don't close the stream for structured errors, let the error handler decide
+              // Close the stream after handling the error
+              controller.close();
+              return;
             }
 
+            // For all other errors, propagate them through the stream
             controller.error(error);
             if (handleGQLErrors) {
               handleGQLErrors(error);

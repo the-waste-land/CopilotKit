@@ -435,6 +435,13 @@ export function useChat(options: UseChatOptions): UseChatHelpers {
             done = readResult.done;
             value = readResult.value;
           } catch (readError) {
+            // Stream read error - display error to user
+            const streamError = new CopilotKitError({
+              message: readError instanceof Error ? readError.message : "Stream read error",
+              code: CopilotKitErrorCode.NETWORK_ERROR,
+            });
+            setBannerError(streamError);
+            await traceUIError(streamError, readError);
             break;
           }
 

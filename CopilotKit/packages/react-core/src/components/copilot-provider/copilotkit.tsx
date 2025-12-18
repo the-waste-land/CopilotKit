@@ -53,11 +53,11 @@ import { StatusChecker } from "../../lib/status-checker";
 
 export function CopilotKit({ children, ...props }: CopilotKitProps) {
   const showDevConsole = props.showDevConsole ?? false;
-  const enabled = shouldShowDevConsole(showDevConsole);
+  const showUsageBanner = shouldShowDevConsole(showDevConsole);
 
   return (
-    <ToastProvider enabled={enabled}>
-      <CopilotErrorBoundary publicApiKey={props.publicApiKey} showUsageBanner={enabled}>
+    <ToastProvider enabled={true}>
+      <CopilotErrorBoundary publicApiKey={props.publicApiKey} showUsageBanner={showUsageBanner}>
         <CopilotKitInternal {...props}>{children}</CopilotKitInternal>
       </CopilotErrorBoundary>
     </ToastProvider>

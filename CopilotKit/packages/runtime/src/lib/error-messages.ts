@@ -106,7 +106,7 @@ export const errorConfig: ErrorConfig = {
     // Authentication patterns
     "401": {
       message:
-        "Authentication failed. Please check your API keys and ensure they are correctly configured.",
+        "鉴权失败. 请刷新页面后重试.",
       category: "authentication",
       severity: "error",
       actionable: true,

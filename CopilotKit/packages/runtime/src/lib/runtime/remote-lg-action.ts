@@ -141,30 +141,36 @@ export async function execute(args: ExecutionArgs): Promise<ReadableStream<Uint8
       const cause = lastError?.cause;
       const errorCode = cause?.code || lastError?.code;
 
+      let finalError: Error;
+
       if (errorCode === "ECONNREFUSED") {
-        throw new CopilotKitMisuseError({
+        finalError = new CopilotKitMisuseError({
           message: `
             The LangGraph client could not connect to the graph after ${RETRY_CONFIG.maxRetries + 1} attempts. Please further check previous logs, which includes further details.
             
             See more: https://docs.copilotkit.ai/troubleshooting/common-issues`,
         });
-      } else {
+      } else if (
+        lastError instanceof CopilotKitError ||
+        lastError instanceof CopilotKitLowLevelError ||
+        (lastError instanceof Error && lastError.name && lastError.name.includes("CopilotKit"))
+      ) {
         // Preserve already structured CopilotKit errors with semantic information
-        if (
-          lastError instanceof CopilotKitError ||
-          lastError instanceof CopilotKitLowLevelError ||
-          (lastError instanceof Error && lastError.name && lastError.name.includes("CopilotKit"))
-        ) {
-          throw lastError; // Re-throw to preserve semantic information and visibility settings
-        }
-
-        throw new CopilotKitMisuseError({
+        finalError = lastError;
+      } else {
+        finalError = new CopilotKitMisuseError({
           message: `
             The LangGraph client threw unhandled error ${lastError}.
             
             See more: https://docs.copilotkit.ai/troubleshooting/common-issues`,
         });
       }
+
+      // Send error through the stream to the frontend
+      controller.error(finalError);
+
+      // Note: After controller.error(), the stream is in an error state
+      // No need to throw again as the error has been communicated
     },
   });
 }
@@ -226,8 +232,23 @@ async function streamEvents(controller: ReadableStreamDefaultController, args: E
 
   const agentStateValues = agentState.values as State;
   state.messages = agentStateValues.messages;
+  
+  // Check if the previous execution failed by looking at tasks with errors
+  // If any task has an error, we should restart from the beginning instead of continuing
+  const previousExecutionFailed = agentState.tasks?.some(task => task.error != null) ?? false;
+  
+  if (previousExecutionFailed) {
+    const errorTasks = agentState.tasks?.filter(task => task.error != null) ?? [];
+    logger.info(
+      `Previous agent execution failed with ${errorTasks.length} error(s). Restarting from the beginning instead of continuing from node ${nodeName}.`
+    );
+    errorTasks.forEach(task => {
+      logger.debug(`Task ${task.name} (${task.id}) failed with error: ${task.error}`);
+    });
+  }
+  
   const mode =
-    threadId && nodeName != "__end__" && nodeName != undefined && nodeName != null
+    threadId && nodeName != "__end__" && nodeName != undefined && nodeName != null && !previousExecutionFailed
       ? "continue"
       : "start";
   let formattedMessages = [];
@@ -603,16 +624,9 @@ async function streamEvents(controller: ReadableStreamDefaultController, args: E
       error: e.message,
     });
 
-    // Re-throw CopilotKit errors so they can be handled properly at higher levels
-    if (
-      e instanceof CopilotKitError ||
-      e instanceof CopilotKitLowLevelError ||
-      (e instanceof Error && e.name && e.name.includes("CopilotKit"))
-    ) {
-      throw e;
-    }
-
-    return Promise.resolve();
+    // Re-throw all errors to be handled by the outer execute() function
+    // The outer function will properly format and send the error through the stream
+    throw e;
   }
 }
 
@@ -877,9 +891,6 @@ function copilotkitMessagesToLangChain(messages: Message[]): LangGraphPlatformMe
   const processedActionExecutions = new Set<string>();
 
   for (const message of messages) {
-    
-    console.error("+++++++++++liweixin+++++++++++, message: ")
-    console.error(message)
     // Handle TextMessage
     if (message.isTextMessage()) {
       if (message.role === "user") {
@@ -924,8 +935,6 @@ function copilotkitMessagesToLangChain(messages: Message[]): LangGraphPlatformMe
 
     // Handle FileMessage
     if (message.isFileMessage()) {
-      console.log("!!!liweixin!!!, push file")
-      console.log(message)
       if (message.role === "user") {
         result.push({
           ...message,
