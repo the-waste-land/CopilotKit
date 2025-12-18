@@ -1,5 +1,13 @@
 # @copilotkit/sdk-js
 
+## 1.9.7
+
+### Patch Changes
+
+- 修改异常显示和修改、添加文件拖入功能
+- Updated dependencies
+  - @copilotkit/shared@1.9.7
+
 ## 1.9.6
 
 ### Patch Changes
