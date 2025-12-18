@@ -179,6 +179,11 @@ export interface InputProps {
   onStop?: () => void;
   onUpload?: () => void;
   hideStopButton?: boolean;
+  onDragEnter?: React.DragEventHandler<HTMLDivElement>;
+  onDragOver?: React.DragEventHandler<HTMLDivElement>;
+  onDragLeave?: React.DragEventHandler<HTMLDivElement>;
+  onDrop?: React.DragEventHandler<HTMLDivElement>;
+  isDragOver?: boolean;
 }
 
 export interface RenderSuggestionsListProps {

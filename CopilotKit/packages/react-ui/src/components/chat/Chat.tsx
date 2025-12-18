@@ -376,6 +376,7 @@ export function CopilotChat({
   const { additionalInstructions, setChatInstructions } = useCopilotContext();
   const [selectedFiles, setSelectedFiles] = useState<Array<FileUpload>>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   
   // Compression dialog state
   const [showCompressionDialog, setShowCompressionDialog] = useState(false);
@@ -413,6 +414,102 @@ export function CopilotChat({
     }
     setShowCompressionDialog(false);
     setPendingCompression(null);
+  };
+
+  const readFileAsBase64 = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const base64String = (e.target?.result as string)?.split(",")[1] || "";
+        resolve(base64String);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+  const prepareFileUpload = async (file: File): Promise<FileUpload | null> => {
+    const base64String = await readFileAsBase64(file);
+    console.log(`[prepareFileUpload] 文件 ${file.name} 读取完成, base64长度:`, base64String.length);
+
+    if (!base64String) {
+      return null;
+    }
+
+    try {
+      let finalBase64 = base64String;
+      let finalContentType = file.type;
+
+      const isImage = file.type.startsWith("image/");
+      const compressionEnabled = imageCompression?.enabled === true;
+
+      if (isImage && compressionEnabled) {
+        const isPng = file.type === "image/png";
+        const isJpg = file.type === "image/jpeg" || file.type === "image/jpg";
+        const pngTargetSize = imageCompression?.pngTargetSizeKB ?? 200;
+        const jpgTargetSize = imageCompression?.jpgTargetSizeKB ?? 250;
+
+        if (isPng) {
+          console.log(`[prepareFileUpload] PNG 图片 ${file.name} 正在转换为 JPG...`);
+          finalBase64 = await convertPngToJpg(base64String, pngTargetSize);
+          finalContentType = "image/jpeg";
+          const finalSizeKB = getImageSizeInKB(finalBase64);
+          console.log(`[prepareFileUpload] PNG 转换完成，新大小: ${finalSizeKB.toFixed(0)} KB`);
+        } else if (isJpg) {
+          const sizeKB = getImageSizeInKB(base64String);
+          console.log(`[prepareFileUpload] JPG 图片 ${file.name} 大小: ${sizeKB.toFixed(0)} KB`);
+
+          if (needsCompression(base64String, jpgTargetSize)) {
+            console.log(
+              `[prepareFileUpload] JPG 图片 ${file.name} 超过 ${jpgTargetSize}KB，等待用户确认...`,
+            );
+            const result = await new Promise<FileUpload | null>((dialogResolve) => {
+              setPendingCompression({
+                file,
+                base64: base64String,
+                resolve: dialogResolve,
+              });
+              setShowCompressionDialog(true);
+            });
+
+            if (result === null) {
+              console.log(`[prepareFileUpload] 用户取消压缩 ${file.name}`);
+              return null;
+            }
+
+            finalBase64 = result.bytes;
+            const finalSizeKB = getImageSizeInKB(finalBase64);
+            console.log(`[prepareFileUpload] JPG 压缩完成，新大小: ${finalSizeKB.toFixed(0)} KB`);
+          }
+        }
+      }
+
+      return {
+        contentType: finalContentType,
+        bytes: finalBase64,
+        fileName: file.name,
+      };
+    } catch (error) {
+      console.error(`[prepareFileUpload] 处理文件 ${file.name} 失败:`, error);
+      throw error;
+    }
+  };
+
+  const processFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+
+    try {
+      const loadedFiles = (await Promise.all(files.map(prepareFileUpload))).filter(
+        (f): f is FileUpload => f !== null,
+      );
+      console.log("[processFiles] 所有文件读取完成:", loadedFiles.length);
+      setSelectedFiles((prev) => {
+        const newFiles = [...prev, ...loadedFiles];
+        console.log("[processFiles] 更新后的文件队列:", newFiles.length);
+        return newFiles;
+      });
+    } catch (error) {
+      console.error("[processFiles] 读取文件出错:", error);
+    }
   };
 
   // Clipboard paste handler
@@ -620,102 +717,43 @@ export function CopilotChat({
 
     if (files.length === 0) return;
 
-    const fileReadPromises = files.map((file) => {
-      return new Promise<FileUpload | null>(async (resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-          const base64String = (e.target?.result as string)?.split(",")[1] || "";
-          console.log(`[handleFileUpload] 文件 ${file.name} 读取完成, base64长度:`, base64String.length);
-          
-          if (!base64String) {
-            resolve(null);
-            return;
-          }
-
-          try {
-            let finalBase64 = base64String;
-            let finalContentType = file.type;
-
-            // Check if compression is enabled and if it's an image
-            const isImage = file.type.startsWith("image/");
-            const compressionEnabled = imageCompression?.enabled === true;
-            
-            if (isImage && compressionEnabled) {
-              const isPng = file.type === "image/png";
-              const isJpg = file.type === "image/jpeg" || file.type === "image/jpg";
-              const pngTargetSize = imageCompression?.pngTargetSizeKB ?? 200;
-              const jpgTargetSize = imageCompression?.jpgTargetSizeKB ?? 250;
-              
-              if (isPng) {
-                // PNG: Always convert to JPG and compress to target size
-                console.log(`[handleFileUpload] PNG 图片 ${file.name} 正在转换为 JPG...`);
-                finalBase64 = await convertPngToJpg(base64String, pngTargetSize);
-                finalContentType = "image/jpeg";
-                const finalSizeKB = getImageSizeInKB(finalBase64);
-                console.log(`[handleFileUpload] PNG 转换完成，新大小: ${finalSizeKB.toFixed(0)} KB`);
-              } else if (isJpg) {
-                // JPG: Check size and show dialog if exceeds threshold
-                const sizeKB = getImageSizeInKB(base64String);
-                console.log(`[handleFileUpload] JPG 图片 ${file.name} 大小: ${sizeKB.toFixed(0)} KB`);
-                
-                if (needsCompression(base64String, jpgTargetSize)) {
-                  console.log(`[handleFileUpload] JPG 图片 ${file.name} 超过 ${jpgTargetSize}KB，等待用户确认...`);
-                  // Show dialog and wait for user confirmation
-                  const result = await new Promise<FileUpload | null>((dialogResolve) => {
-                    setPendingCompression({
-                      file,
-                      base64: base64String,
-                      resolve: dialogResolve,
-                    });
-                    setShowCompressionDialog(true);
-                  });
-                  
-                  if (result === null) {
-                    console.log(`[handleFileUpload] 用户取消压缩 ${file.name}`);
-                    resolve(null);
-                    return;
-                  }
-                  
-                  finalBase64 = result.bytes;
-                  const finalSizeKB = getImageSizeInKB(finalBase64);
-                  console.log(`[handleFileUpload] JPG 压缩完成，新大小: ${finalSizeKB.toFixed(0)} KB`);
-                }
-              }
-            }
-
-            resolve({
-              contentType: finalContentType,
-              bytes: finalBase64,
-              fileName: file.name,
-            });
-          } catch (error) {
-            console.error(`[handleFileUpload] 处理文件 ${file.name} 失败:`, error);
-            reject(error);
-          }
-        };
-        reader.onerror = (error) => {
-          console.error(`[handleFileUpload] 文件 ${file.name} 读取失败:`, error);
-          reject(error);
-        };
-        reader.readAsDataURL(file);
-      });
-    });
-
-    try {
-      const loadedFiles = (await Promise.all(fileReadPromises)).filter((f) => f !== null);
-      console.log("[handleFileUpload] 所有文件读取完成:", loadedFiles.length);
-      setSelectedFiles((prev) => {
-        const newFiles = [...prev, ...loadedFiles];
-        console.log("[handleFileUpload] 更新后的文件队列:", newFiles.length);
-        return newFiles;
-      });
-    } catch (error) {
-      console.error("[handleFileUpload] 读取文件出错:", error);
-    }
+    await processFiles(files);
   };
 
   const removeSelectedFile = (index: number) => {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!uploadsEnabled) return;
+    event.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!uploadsEnabled) return;
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "copy";
+    }
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!uploadsEnabled) return;
+    event.preventDefault();
+    setIsDragOver(false);
+  };
+
+  const handleDropUpload = async (event: React.DragEvent<HTMLDivElement>) => {
+    if (!uploadsEnabled) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragOver(false);
+
+    const files = Array.from(event.dataTransfer?.files || []);
+    console.log("[handleDropUpload] 拖拽文件数量:", files.length);
+    await processFiles(files);
   };
 
   return (
@@ -765,6 +803,11 @@ export function CopilotChat({
         isVisible={isVisible}
         onStop={stopGeneration}
         onUpload={uploadsEnabled ? () => fileInputRef.current?.click() : undefined}
+        onDragEnter={uploadsEnabled ? handleDragEnter : undefined}
+        onDragOver={uploadsEnabled ? handleDragOver : undefined}
+        onDragLeave={uploadsEnabled ? handleDragLeave : undefined}
+        onDrop={uploadsEnabled ? handleDropUpload : undefined}
+        isDragOver={isDragOver}
         hideStopButton={hideStopButton}
       />
 

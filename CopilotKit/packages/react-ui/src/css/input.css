@@ -10,6 +10,15 @@
   width: 95%;
 }
 
+.copilotKitInput.copilotKitInputDragOver {
+  border: 1px dashed var(--copilot-kit-primary-color);
+  background-color: color-mix(
+    in srgb,
+    var(--copilot-kit-primary-color) 8%,
+    var(--copilot-kit-input-background-color)
+  );
+}
+
 .copilotKitInputContainer {
   width: 100%;
   padding: 0;

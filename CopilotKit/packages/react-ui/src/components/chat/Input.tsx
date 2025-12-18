@@ -15,6 +15,11 @@ export const Input = ({
   onStop,
   onUpload,
   hideStopButton = false,
+  onDragEnter,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  isDragOver = false,
 }: InputProps) => {
   const context = useChatContext();
   const copilotContext = useCopilotContext();
@@ -93,10 +98,18 @@ export const Input = ({
   }, [isInProgress, hideStopButton]);
 
   const sendDisabled = !canSend && !canStop;
+  const inputClassName = `copilotKitInput${isDragOver ? " copilotKitInputDragOver" : ""}`;
 
   return (
     <div className={`copilotKitInputContainer ${showPoweredBy ? "poweredByContainer" : ""}`}>
-      <div className="copilotKitInput" onClick={handleDivClick}>
+      <div
+        className={inputClassName}
+        onClick={handleDivClick}
+        onDragEnter={onDragEnter}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+      >
         <AutoResizingTextarea
           ref={textareaRef}
           placeholder={context.labels.placeholder}
