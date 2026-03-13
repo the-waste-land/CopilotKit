@@ -23,9 +23,10 @@ const createFetchFn =
     // @ts-expect-error -- since this is our own header, TS will not recognize
     const publicApiKey = args[1]?.headers?.["x-copilotcloud-public-api-key"];
     try {
+      console.log('[CopilotKit:fetch] starting fetch', { url: args[0] });
       const result = await fetch(args[0], { ...(args[1] ?? {}), signal });
 
-      console.debug('[CopilotKit:fetch] response received', {
+      console.log('[CopilotKit:fetch] response received', {
         status: result.status,
         contentType: result.headers.get('content-type'),
         bodyExists: !!result.body,
@@ -54,12 +55,17 @@ const createFetchFn =
       }
 
       const cloned = result.clone();
-      console.debug('[CopilotKit:fetch] returning cloned response', {
+      console.log('[CopilotKit:fetch] returning cloned response', {
         originalLocked: result.body?.locked,
         clonedLocked: cloned.body?.locked,
       });
       return cloned;
     } catch (error) {
+      console.error('[CopilotKit:fetch] error caught', {
+        message: (error as Error).message,
+        name: (error as Error).name,
+        stack: (error as Error).stack?.split('\n').slice(0, 3).join('\n'),
+      });
       // Let abort error pass through. It will be suppressed later
       if (
         (error as Error).message.includes("BodyStreamBuffer was aborted") ||
@@ -143,7 +149,7 @@ export class CopilotRuntimeClient {
   public asStream<S, T>(source: OperationResultSource<OperationResult<S, { data: T }>>) {
     const handleGQLErrors = this.handleGQLErrors;
     let chunkIndex = 0;
-    console.debug('[CopilotKit:asStream] creating ReadableStream from source');
+    console.log('[CopilotKit:asStream] creating ReadableStream from source');
     return new ReadableStream<S>({
       start(controller) {
         source.subscribe(({ data, hasNext, error }) => {
@@ -197,10 +203,10 @@ export class CopilotRuntimeClient {
             }
           } else {
             chunkIndex++;
-            console.debug('[CopilotKit:asStream] chunk received', { chunkIndex, hasNext });
+            console.log('[CopilotKit:asStream] chunk received', { chunkIndex, hasNext });
             controller.enqueue(data);
             if (!hasNext) {
-              console.debug('[CopilotKit:asStream] stream complete', { totalChunks: chunkIndex });
+              console.log('[CopilotKit:asStream] stream complete', { totalChunks: chunkIndex });
               controller.close();
             }
           }

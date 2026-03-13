@@ -5,7 +5,10 @@
       "Bash(grep -rn \"response\\\\.body\\\\|stream\\\\.locked\" /Users/liweixin/code/itdev/CopilotKit/CopilotKit/packages --include=\"*.ts\" --include=\"*.tsx\" 2>/dev/null | head -20)",
       "Bash(for pkg in packages/*/package.json; do sed -i '' 's/\"version\": \"1.9.7\"/\"version\": \"1.9.8\"/' \"$pkg\"; done)",
       "Bash(grep -rn \"1.9.7\" packages/*/package.json)",
-      "Bash(git add -A && git commit -m \"feat: add stream diagnostics logging and clone response fix for ReadableStream locked error\n\n- Clone fetch response to prevent ReadableStream already locked errors\n- Add debug logging in createFetchFn and asStream for network issue diagnosis\n- Bump all packages to 1.9.8\")"
+      "Bash(git add -A && git commit -m \"feat: add stream diagnostics logging and clone response fix for ReadableStream locked error\n\n- Clone fetch response to prevent ReadableStream already locked errors\n- Add debug logging in createFetchFn and asStream for network issue diagnosis\n- Bump all packages to 1.9.8\")",
+      "Bash(bash scripts/release/publish-packages-manually.sh)",
+      "Bash(for pkg in packages/*/package.json; do sed -i '' 's/\"version\": \"1.9.8\"/\"version\": \"1.9.9\"/' \"$pkg\"; done)",
+      "Bash(git add -A && git commit -m \"chore: enhance logging for network error diagnosis\n\n- Change console.debug to console.log for production visibility\n- Add fetch start logging and detailed error catching\n- Bump to 1.9.9\")"
     ]
   }
 }
