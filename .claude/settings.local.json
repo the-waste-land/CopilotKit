@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(ask)",
+      "Bash(grep -rn \"response\\\\.body\\\\|stream\\\\.locked\" /Users/liweixin/code/itdev/CopilotKit/CopilotKit/packages --include=\"*.ts\" --include=\"*.tsx\" 2>/dev/null | head -20)",
+      "Bash(for pkg in packages/*/package.json; do sed -i '' 's/\"version\": \"1.9.7\"/\"version\": \"1.9.8\"/' \"$pkg\"; done)",
+      "Bash(grep -rn \"1.9.7\" packages/*/package.json)",
+      "Bash(git add -A && git commit -m \"feat: add stream diagnostics logging and clone response fix for ReadableStream locked error\n\n- Clone fetch response to prevent ReadableStream already locked errors\n- Add debug logging in createFetchFn and asStream for network issue diagnosis\n- Bump all packages to 1.9.8\")"
+    ]
+  }
+}

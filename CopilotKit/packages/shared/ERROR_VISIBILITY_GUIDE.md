@@ -171,3 +171,4 @@ const error = new CopilotKitError({
 | `TOAST` | ✅ 显示 | ✅ 显示 | 一般错误 |
 | `DEV_ONLY` | ✅ 显示 | ❌ 隐藏 | 开发配置问题 |
 | `SILENT` | ❌ 隐藏 | ❌ 隐藏 | 调试信息 |
+

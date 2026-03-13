@@ -25,6 +25,13 @@ const createFetchFn =
     try {
       const result = await fetch(args[0], { ...(args[1] ?? {}), signal });
 
+      console.debug('[CopilotKit:fetch] response received', {
+        status: result.status,
+        contentType: result.headers.get('content-type'),
+        bodyExists: !!result.body,
+        bodyLocked: result.body?.locked,
+      });
+
       // No mismatch checking if cloud is being used
       const mismatch = publicApiKey
         ? null
@@ -46,7 +53,12 @@ const createFetchFn =
         handleGQLWarning(mismatch.message);
       }
 
-      return result;
+      const cloned = result.clone();
+      console.debug('[CopilotKit:fetch] returning cloned response', {
+        originalLocked: result.body?.locked,
+        clonedLocked: cloned.body?.locked,
+      });
+      return cloned;
     } catch (error) {
       // Let abort error pass through. It will be suppressed later
       if (
@@ -130,10 +142,18 @@ export class CopilotRuntimeClient {
 
   public asStream<S, T>(source: OperationResultSource<OperationResult<S, { data: T }>>) {
     const handleGQLErrors = this.handleGQLErrors;
+    let chunkIndex = 0;
+    console.debug('[CopilotKit:asStream] creating ReadableStream from source');
     return new ReadableStream<S>({
       start(controller) {
         source.subscribe(({ data, hasNext, error }) => {
           if (error) {
+            console.error('[CopilotKit:asStream] error received', {
+              message: error.message,
+              networkError: (error as any).networkError?.message,
+              hasNext,
+              chunkIndex,
+            });
             if (
               error.message.includes("BodyStreamBuffer was aborted") ||
               error.message.includes("signal is aborted without reason")
@@ -176,8 +196,11 @@ export class CopilotRuntimeClient {
               handleGQLErrors(error);
             }
           } else {
+            chunkIndex++;
+            console.debug('[CopilotKit:asStream] chunk received', { chunkIndex, hasNext });
             controller.enqueue(data);
             if (!hasNext) {
+              console.debug('[CopilotKit:asStream] stream complete', { totalChunks: chunkIndex });
               controller.close();
             }
           }
